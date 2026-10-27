@@ -1,0 +1,27 @@
+{
+  "policy_version": "2026-10-12.1",
+  "tenants": {
+    "acme": {"display_name": "Acme", "active": true, "db_role": "acme_reader"},
+    "northstar": {"display_name": "Northstar", "active": true, "db_role": "northstar_reader"}
+  },
+  "users": {
+    "alice@acme.example": {
+      "name": "Alice (Acme analyst)",
+      "tenant": "acme",
+      "grants": {"orders": ["list", "describe", "query"]}
+    },
+    "nina@northstar.example": {
+      "name": "Nina (Northstar analyst)",
+      "tenant": "northstar",
+      "grants": {"orders": ["list", "describe", "query"]}
+    },
+    "victor@acme.example": {
+      "name": "Victor (Acme viewer, catalog only)",
+      "tenant": "acme",
+      "grants": {"orders": ["list", "describe"]}
+    }
+  },
+  "datasets": {
+    "orders": {"tables": ["orders"], "row_limit": 200}
+  }
+}

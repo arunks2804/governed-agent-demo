@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+        working-directory: e2e
+      - name: ruff, mypy, opa check/fmt, tsc, shell syntax
+        run: ./scripts/lint.sh
+
+  enforcement-and-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      # No LLM in CI: every enforcement and UI test uses scripted plans and
+      # prepared tests. Live-LLM tests are optional and marked live_llm.
+      LLM_PROVIDER: none
+      COMPOSE_FILE: compose.yaml:compose.prompt-only.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Generate throwaway secrets
+        run: ./scripts/gen-secrets.sh
+      - name: Start stack (protected + labelled prompt-only overlay)
+        run: docker compose up -d --build --wait
+      - name: Install Playwright + Chromium
+        working-directory: e2e
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Enforcement, chaos, log-hygiene and Chromium tests
+        run: ./scripts/test.sh
+      - name: Record demo video
+        if: success()
+        working-directory: e2e
+        run: RECORD_READ_MS=1500 npx playwright test --config playwright.record.config.ts
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color > reports/compose-logs.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: |
+            reports/
+            recordings/governed-agent-demo.webm
+          retention-days: 14

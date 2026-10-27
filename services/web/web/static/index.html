@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Governed Agent Demo</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#run-view">Skip to results</a>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Governed Agent Data Access</h1>
+      <p class="muted">Synthetic data for two fictional companies, Acme and Northstar. Every result comes from the live services.</p>
+    </div>
+    <ul class="status" id="status" aria-label="Service status" data-testid="status"></ul>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="card" aria-labelledby="identity-h">
+        <h2 id="identity-h"><span class="step-no">1</span> Identity</h2>
+        <div id="signed-out">
+          <label for="identity-select">Demo user</label>
+          <div class="row">
+            <select id="identity-select" data-testid="identity-select"></select>
+            <button type="button" id="login-btn" class="primary" data-testid="login">Sign in</button>
+          </div>
+        </div>
+        <div id="signed-in" hidden>
+          <p class="whoami" data-testid="whoami"></p>
+          <button type="button" id="logout-btn" class="ghost" data-testid="logout">Sign out</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="scenarios-h">
+        <h2 id="scenarios-h"><span class="step-no">2</span> Scenarios</h2>
+        <p class="muted small">Scripted plans and prepared tests: fixed SQL/code, not LLM output.</p>
+        <ul id="scenario-list" class="scenario-list" data-testid="scenario-list"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="custom-h">
+        <h2 id="custom-h"><span class="step-no">3</span> Try it yourself</h2>
+        <div class="tabs" role="tablist" aria-label="Input type">
+          <button type="button" role="tab" id="tab-llm" aria-selected="true" aria-controls="custom-form" data-mode="llm">Ask the agent</button>
+          <button type="button" role="tab" id="tab-sql" aria-selected="false" aria-controls="custom-form" data-mode="manual_sql" tabindex="-1">SQL via MCP</button>
+          <button type="button" role="tab" id="tab-python" aria-selected="false" aria-controls="custom-form" data-mode="manual_python" tabindex="-1">Python</button>
+        </div>
+        <form id="custom-form" role="tabpanel" aria-labelledby="tab-llm">
+          <label for="custom-input" id="custom-label">Task for the agent (live local LLM)</label>
+          <textarea id="custom-input" rows="5" data-testid="custom-input" spellcheck="false"></textarea>
+          <div class="row" id="runner-row">
+            <label for="runner-select">Runner</label>
+            <select id="runner-select" data-testid="runner-select">
+              <option value="protected">protected (MCP only)</option>
+              <option value="prompt-only">prompt-only (insecure comparison)</option>
+            </select>
+          </div>
+          <p class="muted small" id="custom-hint"></p>
+          <button type="submit" class="primary" data-testid="custom-submit">Run</button>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="policy-h">
+        <h2 id="policy-h">Policy console (OPA)</h2>
+        <p id="policy-state" data-testid="policy-state" class="small"></p>
+        <div class="row">
+          <button type="button" id="revoke-btn" data-testid="revoke">Revoke my tenant's query access</button>
+          <button type="button" id="restore-btn" data-testid="restore">Restore</button>
+        </div>
+        <p class="muted small">To simulate an OPA outage, stop the container: <code>make opa-down</code> (restart with <code>make opa-up</code>).</p>
+        <button type="button" id="reset-btn" class="ghost" data-testid="reset">Reset demo</button>
+      </section>
+    </aside>
+
+    <section class="results">
+      <div id="run-view" class="card run-view" tabindex="-1" aria-live="polite" aria-busy="false" data-testid="run-view">
+        <div class="empty">
+          <h2>Request → decision → enforcement → result</h2>
+          <p class="muted">Sign in as a demo user, then run a scenario. Each run shows who asked, the SQL or code, the route it took, what decided, what enforced it, and the data that came back.</p>
+        </div>
+      </div>
+      <section class="card" aria-labelledby="history-h">
+        <h2 id="history-h">Run history</h2>
+        <ol id="history" class="history" data-testid="history"></ol>
+      </section>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

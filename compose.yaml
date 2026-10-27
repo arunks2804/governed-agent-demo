@@ -1,0 +1,244 @@
+# Governed Agent Data Access demo - PROTECTED configuration.
+#
+# Network map (all "internal" networks have no route to the internet or host):
+#   edge_net     web (published on 127.0.0.1 only)
+#   egress_net   agent -> local Ollama on the host (only the agent has egress)
+#   app_net      web <-> agent
+#   policy_net   web, data-service, opa         (decisions + policy admin + audit)
+#   db_net       data-service <-> postgres      (ONLY the trusted service reaches the DB)
+#   service_net  mcp-server <-> data-service
+#   sandbox_net  agent, mcp-server, runner      (runner can reach MCP and nothing else)
+#
+# The prompt-only comparison runner is NOT part of this file; see
+# compose.prompt-only.yaml (an explicitly labelled, deliberately insecure overlay).
+name: governed-agent-demo
+
+x-hardened: &hardened
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  restart: unless-stopped
+  tmpfs:
+    - /tmp:size=16m,mode=1777
+
+services:
+  postgres:
+    image: postgres:17.11-alpine3.23
+    user: "70:70"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: governed
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=peer
+    command:
+      - postgres
+      - -c
+      - log_connections=on
+      - -c
+      - log_min_error_statement=error
+      - -c
+      - log_line_prefix=%m [%p] user=%u app=%a
+      - -c
+      - password_encryption=scram-sha-256
+    secrets: [postgres_admin_password, acme_reader_password, northstar_reader_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/initdb:/docker-entrypoint-initdb.d:ro
+      - ./db/migrations:/migrations:ro
+    tmpfs:
+      - /var/run/postgresql:size=1m,uid=70,gid=70,mode=0775
+      - /tmp:size=16m,mode=1777
+    networks:
+      # Fixed, documented address so isolation tests can target the database by
+      # IP (not only by hostname) from the protected runner.
+      db_net: {ipv4_address: 10.231.10.10}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "governed", "-h", "127.0.0.1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  opa:
+    <<: *hardened
+    image: openpolicyagent/opa:1.21.2-static
+    user: "1000:1000"
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --authentication=token
+      - --authorization=basic
+      - --log-format=json
+      - --log-level=info
+      - --set=decision_logs.console=true
+      - /policies
+    env_file: [secrets/opa.env]
+    volumes:
+      - ./opa/policies:/policies:ro
+    networks: [policy_net]
+
+  data-service:
+    <<: *hardened
+    build: ./services/data_service
+    image: governed-demo/data-service:local
+    environment:
+      DB_HOST: postgres
+      DB_NAME: governed
+      OPA_URL: http://opa:8181
+      TENANT_ROLES: '{"acme": "acme_reader", "northstar": "northstar_reader"}'
+      QUERY_TIMEOUT_MS: "3000"
+    secrets:
+      - acme_reader_password
+      - northstar_reader_password
+      - opa_data_service_token
+      - audit_token
+      - source: jwt_public_key
+        target: jwt_public.pem
+    networks: [db_net, policy_net, service_net]
+    depends_on:
+      postgres: {condition: service_healthy}
+      opa: {condition: service_started}
+
+  mcp-server:
+    <<: *hardened
+    build: ./services/mcp_server
+    image: governed-demo/mcp-server:local
+    environment:
+      DATA_SERVICE_URL: http://data-service:8080
+    networks: [service_net, sandbox_net]
+    depends_on:
+      data-service: {condition: service_healthy}
+
+  runner:
+    build: ./services/runner
+    image: governed-demo/runner:local
+    # Root only to drop into the unprivileged 'sandbox' uid per execution.
+    user: "0:0"
+    init: true  # reaps orphaned sandbox processes so they cannot exhaust the pid quota
+    read_only: true
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL]
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1.0
+    env_file: [secrets/runner.env]
+    environment:
+      RUNNER_LABEL: protected
+      MCP_URL: http://mcp-server:8000/mcp
+    tmpfs:
+      - /sandbox:size=64m,mode=1777
+      - /tmp:size=16m,mode=1777
+    networks: [sandbox_net]
+    depends_on:
+      mcp-server: {condition: service_healthy}
+
+  agent:
+    <<: *hardened
+    build: ./services/agent
+    image: governed-demo/agent:local
+    environment:
+      MCP_URL: http://mcp-server:8000/mcp
+      RUNNER_URL: http://runner:8000
+      PROMPT_ONLY_RUNNER_URL: ${PROMPT_ONLY_RUNNER_URL:-}
+      # Local model via Ollama on the host (no API key). LLM_PROVIDER=none disables live runs.
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    secrets:
+      - runner_control_token
+      - source: jwt_public_key
+        target: jwt_public.pem
+    networks: [app_net, sandbox_net, egress_net]
+    depends_on:
+      mcp-server: {condition: service_healthy}
+      runner: {condition: service_healthy}
+
+  web:
+    <<: *hardened
+    build: ./services/web
+    image: governed-demo/web:local
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8088}:8080"
+    environment:
+      AGENT_URL: http://agent:8000
+      DATA_SERVICE_URL: http://data-service:8080
+      OPA_URL: http://opa:8181
+    secrets:
+      - audit_token
+      - opa_admin_token
+      - source: jwt_private_key
+        target: jwt_private.pem
+    networks: [edge_net, app_net, policy_net]
+    depends_on:
+      agent: {condition: service_healthy}
+      data-service: {condition: service_healthy}
+
+  # Enforcement test harness (trusted, test-only). Joins the internal networks
+  # so it can drive the real services; it is never started by `make up`.
+  tests:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    image: governed-demo/tests:local
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    environment:
+      DB_HOST: postgres
+      DATA_SERVICE_URL: http://data-service:8080
+      OPA_URL: http://opa:8181
+      MCP_URL: http://mcp-server:8000/mcp
+      RUNNER_URL: http://runner:8000
+      PROMPT_ONLY_RUNNER_URL: ${PROMPT_ONLY_RUNNER_URL:-}
+      AGENT_URL: http://agent:8000
+      CHAOS: ${CHAOS:-}
+      PYTEST_ADDOPTS: ${PYTEST_ADDOPTS:-}
+    secrets:
+      - acme_reader_password
+      - northstar_reader_password
+      - opa_data_service_token
+      - opa_admin_token
+      - audit_token
+      - runner_control_token
+      - source: jwt_private_key
+        target: jwt_private.pem
+      - source: jwt_public_key
+        target: jwt_public.pem
+    volumes:
+      - ./reports:/reports
+    networks: [db_net, policy_net, service_net, sandbox_net, app_net]
+
+networks:
+  edge_net: {}
+  egress_net: {}
+  app_net: {internal: true}
+  policy_net: {internal: true}
+  db_net:
+    internal: true
+    ipam:
+      config: [{subnet: 10.231.10.0/24}]
+  service_net: {internal: true}
+  sandbox_net: {internal: true}
+
+volumes:
+  pgdata: {}
+
+secrets:
+  postgres_admin_password: {file: ./secrets/postgres_admin_password}
+  acme_reader_password: {file: ./secrets/acme_reader_password}
+  northstar_reader_password: {file: ./secrets/northstar_reader_password}
+  opa_data_service_token: {file: ./secrets/opa_data_service_token}
+  opa_admin_token: {file: ./secrets/opa_admin_token}
+  audit_token: {file: ./secrets/audit_token}
+  runner_control_token: {file: ./secrets/runner_control_token}
+  jwt_private_key: {file: ./secrets/jwt_private.pem}
+  jwt_public_key: {file: ./secrets/jwt_public.pem}

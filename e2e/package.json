@@ -1,0 +1,16 @@
+{
+  "name": "governed-agent-demo-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "record": "playwright test --config playwright.record.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
+    "@playwright/test": "1.64.0",
+    "@types/node": "22.19.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agentic AI Security — Presentation</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/present.css">
+  <script src="/static/present.js" defer></script>
+</head>
+<body class="present-page">
+  <header class="present-hero">
+    <h1>Agentic AI Security</h1>
+    <p class="tagline">Why prompts are not security boundaries</p>
+    <p class="muted" id="env-note"></p>
+  </header>
+
+  <section class="present-intro card">
+    <h2>The setup</h2>
+    <p>An AI agent answers questions by writing SQL and Python. It can reach a shared database holding two
+      fictional companies' orders — <strong>Acme</strong> (60 orders, 20,637.00) and
+      <strong>Northstar</strong> (45 orders, 67,048.50). Users: <strong>Alice</strong> (Acme analyst),
+      <strong>Victor</strong> (Acme viewer), <strong>Nina</strong> (Northstar analyst).</p>
+    <p>Each demo runs the same request in two environments. <span class="chip unprotected">Unprotected</span>
+      has an over-privileged account and no checks. <span class="chip protected">Protected</span> enforces
+      identity, tool validation, central policy, tenant isolation and runtime isolation. Every result below is
+      produced live by the running services.</p>
+    <p class="muted small">Each demo shows a deterministic <strong>probe</strong> (a fixed query that isolates the
+      control). Where useful, you can also run the <strong>live AI</strong> to see what the model actually does.</p>
+  </section>
+
+  <main id="demos" aria-label="Security demonstrations"></main>
+
+  <footer class="present-footer card">
+    <h2>Defense in depth</h2>
+    <p>No unauthorized action should become an unauthorized database transaction. Prompts can be ambiguous,
+      malicious, or injected; agents can make mistakes; tool outputs can be manipulated. Protection comes from
+      <strong>identity, MCP authorization, tool permissions, runtime isolation, database authorization and audit
+      logging</strong> — not from instructions in a prompt.</p>
+  </footer>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

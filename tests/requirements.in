@@ -1,0 +1,9 @@
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+pyjwt[crypto]==2.15.1
+sqlglot==30.22.0
+mcp==2.3.0
+fastapi==0.143.0

@@ -1,0 +1,5 @@
+FROM python:3.12.15-slim-bookworm
+ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+COPY tools/lint.requirements.txt /tmp/req.txt
+RUN pip install --root-user-action=ignore -r /tmp/req.txt
+WORKDIR /src

@@ -1,0 +1,74 @@
+{
+  "voice": "Samantha",
+  "rate": 172,
+  "segments": [
+    {
+      "id": "intro",
+      "text": "This demo is about AI agents and company data. Two fictional companies, Acme and Northstar, keep their orders in one shared database. Alice works at Acme. An AI agent answers her questions by writing SQL and Python. The question is simple: what stops that agent from reaching data it should not see?"
+    },
+    {
+      "id": "p1_title",
+      "text": "Part one. The problem."
+    },
+    {
+      "id": "p1_bypass",
+      "text": "A common setup gives the agent's code a direct database connection and a broad password, and adds one line to its instructions: use the approved tool only. That sentence is the only safeguard. Here, a test script plays the part of an agent that ignores the instruction. It was written by hand, not by the AI. It finds the database, connects with the password sitting in its environment, and reads every company's orders: Acme's sixty, and Northstar's forty five. Nothing stopped it, because nothing was enforced."
+    },
+    {
+      "id": "p2_title",
+      "text": "Part two. The same situations, with protections enforced. Now the agent has no database password and no network route to the database. Its only way to data is the approved tool, and every request is checked."
+    },
+    {
+      "id": "order_summary",
+      "text": "Alice asks for an order summary. The agent's query travels the governed path: the tool server, the data service, the policy engine, and the database. It runs under Acme's own database account, so only Acme's data comes back."
+    },
+    {
+      "id": "select_star",
+      "text": "Next, the agent asks for every order, with no filter at all. The database adds Acme's filter by itself, because of the account it is using. Sixty rows, all Acme."
+    },
+    {
+      "id": "cross_tenant_explicit",
+      "text": "Now the agent asks for Northstar's orders by name. The policy engine sees another company in the query and denies it. The database is never touched."
+    },
+    {
+      "id": "cross_tenant_rls",
+      "text": "A sneakier version hides the company name, so the policy check cannot see it, and the query runs. But the database filter still applies. Zero Northstar rows."
+    },
+    {
+      "id": "write_attempt",
+      "text": "The agent tries to change data. The query checker rejects the update before anything runs."
+    },
+    {
+      "id": "role_change",
+      "text": "It tries to switch to Northstar's database account. Rejected the same way, and the database itself would refuse it too."
+    },
+    {
+      "id": "python_via_mcp",
+      "text": "Python still works, through the approved route. The sandboxed code calls the tool server, and gets only Acme's results."
+    },
+    {
+      "id": "direct_db_protected",
+      "text": "Now the same break-in script from part one, in the protected sandbox. The database name does not resolve. Both of the database's known addresses are unreachable. There is no password. It cannot even attempt a login."
+    },
+    {
+      "id": "revoke",
+      "text": "An administrator revokes Acme's access in the policy engine. The agent and its instructions are unchanged."
+    },
+    {
+      "id": "revoked_run",
+      "text": "The very next request is denied. Policy changes apply immediately."
+    },
+    {
+      "id": "opa_down",
+      "text": "If the policy engine goes down, nothing is allowed. Requests fail closed, and no data is returned."
+    },
+    {
+      "id": "nina",
+      "text": "Finally, Nina from Northstar runs the same unfiltered query. She sees only Northstar's forty five rows, and nothing from Acme."
+    },
+    {
+      "id": "outro",
+      "text": "So the instruction in the prompt was never the real safeguard. Signed identity, query checks, central policy, the database's own filtering, and network isolation are. Every result in this video came from the live system, and the database isolation is also verified by automated tests."
+    }
+  ]
+}

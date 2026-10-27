@@ -1,0 +1,12 @@
+# Lint / type-check toolchain (pinned). Service libraries are installed so mypy can resolve imports.
+ruff==0.17.0
+mypy==2.4.0
+fastapi==0.143.0
+uvicorn==0.54.0
+httpx==0.28.1
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+sqlglot==30.22.0
+pyjwt[crypto]==2.15.1
+mcp==2.3.0
+pytest==9.1.1

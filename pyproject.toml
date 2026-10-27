@@ -1,0 +1,31 @@
+# Tooling configuration only; each service is packaged by its own Dockerfile.
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["e2e/node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE", "SIM", "RUF"]
+ignore = [
+  "S101",   # assert is idiomatic in pytest and for internal invariants
+  "S104",   # services bind 0.0.0.0 inside containers by design
+  "S603", "S607",  # the runner deliberately executes subprocesses (sandboxed)
+  "RUF001", "RUF002", "RUF003",  # typographic characters in UI strings/comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S608", "BLE001"]
+"services/agent/agent/prepared/**" = ["S", "BLE001"]
+"services/data_service/data_service/db.py" = ["S608"]  # SQL is AST-validated and regenerated before use
+"services/runner/runner/server.py" = ["S108"]  # /sandbox is a dedicated tmpfs
+
+[tool.ruff.lint.isort]
+known-first-party = ["data_service", "mcp_server", "runner", "agent", "web", "conftest"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+no_implicit_optional = true
