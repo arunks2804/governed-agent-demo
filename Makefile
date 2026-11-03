@@ -52,8 +52,8 @@ record-walkthrough: e2e/node_modules ## Record the narrated single-tenant walkth
 record-security: ## Record the narrated security presentation (recordings/agentic-security-demo.mp4)
 	python scripts/record-terminal.py $(ARGS)
 
-record-security-test: ## Dry-run the recording flow without producing a video
-	python scripts/record-terminal.py --no-video
+record-security-test: ## Record .cast only (no video conversion or narration)
+	python scripts/record-terminal.py --cast-only --silent
 
 e2e/node_modules:
 	cd e2e && npm ci && npx playwright install chromium

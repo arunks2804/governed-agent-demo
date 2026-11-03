@@ -10,8 +10,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 recordings/narration/
-var/demo_audio_terminal/
-var/terminal_capture.txt
+var/
 *.mp4
 *.webm
 *.cast

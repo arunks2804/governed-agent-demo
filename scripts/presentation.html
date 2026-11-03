@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  width: 1920px; height: 1080px; overflow: hidden;
+  font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: #0d1117; color: #e6edf3;
+}
+
+.slide { display: none; width: 1920px; height: 1080px; position: relative; }
+.slide.active { display: block; }
+
+.bg { position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 15% 50%, #0f1b2d 0%, #0d1117 65%); }
+
+.top-bar { position: absolute; top: 0; left: 0; right: 0; height: 6px; }
+
+.content {
+  position: relative; z-index: 1;
+  padding: 72px 140px;
+  height: calc(100% - 64px);
+  display: flex; flex-direction: column; justify-content: center;
+}
+
+.badge {
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  padding: 5px 16px; border-radius: 4px; width: fit-content; margin-bottom: 28px;
+}
+
+h1 { font-size: 80px; font-weight: 800; line-height: 1.05;
+     color: #fff; letter-spacing: -3px; margin-bottom: 20px; }
+h2 { font-size: 58px; font-weight: 700; line-height: 1.1;
+     color: #fff; letter-spacing: -2px; margin-bottom: 20px; }
+
+.subtitle { font-size: 27px; color: #8b949e; margin-bottom: 44px;
+            max-width: 960px; line-height: 1.55; }
+
+.divider { width: 64px; height: 4px; border-radius: 2px; margin-bottom: 40px; }
+
+.body { font-size: 25px; color: #c9d1d9; line-height: 1.8;
+        max-width: 1420px; margin-bottom: 36px; }
+
+/* Bullets */
+.bullets { list-style: none; margin-top: 4px; }
+.bullets li {
+  font-size: 24px; color: #c9d1d9; line-height: 1.55;
+  padding: 9px 0 9px 52px; position: relative;
+}
+.bullets li .dot {
+  position: absolute; left: 0; top: 12px;
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 900;
+}
+.bullets li strong { color: #f0f6fc; }
+.note { font-size: 20px; color: #484f58; margin-top: 28px; }
+
+/* 2-column threat layout */
+.threat-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; margin-top: 0; }
+.threat-col h3 {
+  font-size: 15px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  margin-bottom: 20px; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.threat-col .bullets li { font-size: 22px; padding: 7px 0 7px 44px; }
+.threat-col .bullets li .dot { width: 24px; height: 24px; font-size: 12px; top: 9px; }
+
+/* 3-layer enforcement model */
+.layers { display: flex; flex-direction: column; gap: 20px; margin-top: 8px; }
+.layer {
+  display: flex; align-items: center; gap: 32px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px; padding: 22px 28px;
+}
+.layer-num {
+  font-size: 13px; font-weight: 800; letter-spacing: 0.15em;
+  padding: 6px 14px; border-radius: 4px; white-space: nowrap;
+}
+.layer-title { font-size: 22px; font-weight: 700; color: #f0f6fc; width: 260px; }
+.layer-desc { font-size: 21px; color: #8b949e; line-height: 1.45; }
+
+/* Enforcement table */
+.et { width: 100%; border-collapse: collapse; }
+.et td { padding: 16px 24px; font-size: 22px;
+         border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+.et tr:last-child td { border-bottom: none; }
+.et .lv { font-family: 'Courier New', monospace; font-weight: 700;
+          font-size: 17px; color: #484f58; width: 50px; }
+.et .ln { font-weight: 600; color: #e6edf3; width: 280px; }
+.et .ld { color: #8b949e; }
+.et .pill {
+  display: inline-block; padding: 4px 18px; border-radius: 20px;
+  font-size: 13px; font-weight: 800; letter-spacing: 0.12em; white-space: nowrap;
+}
+.pill.unsafe { background: rgba(248,81,73,0.12); color: #f85149;
+               border: 1px solid rgba(248,81,73,0.25); }
+.pill.safe   { background: rgba(63,185,80,0.12); color: #3fb950;
+               border: 1px solid rgba(63,185,80,0.25); }
+
+/* Level detail card */
+.level-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px; padding: 32px 40px; margin-bottom: 32px;
+}
+.level-card .what { font-size: 22px; color: #8b949e; line-height: 1.6; margin-bottom: 20px; }
+.level-card .expect { font-size: 22px; color: #c9d1d9; line-height: 1.6; }
+.level-card .expect strong { color: #f0f6fc; }
+.verdict { display: inline-flex; align-items: center; gap: 12px;
+           font-size: 18px; font-weight: 700; margin-top: 24px; }
+
+/* Conclusion */
+.conclusion-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+.conclusion-table td { padding: 14px 24px; font-size: 22px;
+                       border-bottom: 1px solid rgba(255,255,255,0.06); }
+.conclusion-table tr:last-child td { border-bottom: none; }
+.conclusion-table .lv { font-family: monospace; color: #484f58; width: 50px; }
+.conclusion-table .ln { font-weight: 600; color: #e6edf3; width: 260px; }
+.conclusion-table .ld { color: #8b949e; }
+.takeaway-box {
+  background: rgba(88,166,255,0.05);
+  border: 1px solid rgba(88,166,255,0.15);
+  border-radius: 8px; padding: 28px 36px;
+}
+.takeaway-box p { font-size: 24px; font-weight: 500; color: #c9d1d9; line-height: 1.65; }
+.takeaway-box strong { color: #f0f6fc; }
+
+/* Footer */
+.footer {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 64px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.2);
+  display: flex; align-items: center; padding: 0 140px;
+  justify-content: space-between;
+  font-size: 14px; color: #30363d;
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 1: TITLE -->
+<div class="slide" id="s1">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#58a6ff,#1f6feb,transparent)"></div>
+  <div class="content" style="justify-content:center">
+    <div class="badge" style="background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.25)">
+      Security Demo
+    </div>
+    <h1>Agentic AI Security</h1>
+    <p class="subtitle">Why Prompts Are Not Security Boundaries</p>
+    <div class="divider" style="background:linear-gradient(90deg,#58a6ff,transparent)"></div>
+    <p style="font-size:21px;color:#484f58;line-height:2.1">
+      Four enforcement configurations &nbsp;·&nbsp; One cross-tenant query &nbsp;·&nbsp; PostgreSQL &nbsp;·&nbsp; OPA &nbsp;·&nbsp; Ollama &nbsp;·&nbsp; MCP
+    </p>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>Multi-tenant AI Security</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 2: PROBLEM -->
+<div class="slide" id="s2">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#f85149,#b91c1c,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(248,81,73,0.1);color:#f85149;border:1px solid rgba(248,81,73,0.25)">Problem Statement</div>
+    <h2>The Default Configuration<br>Is Not Secure.</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#f85149,transparent)"></div>
+    <p class="body">
+      AI agents now translate natural language into structured database queries on behalf of users.
+      Authorization is expressed in a prompt — not in cryptographically verified credentials.
+    </p>
+    <ul class="bullets">
+      <li>
+        <span class="dot" style="background:rgba(248,81,73,0.15);color:#f85149">✕</span>
+        <strong>OWASP LLM Top 10 #1 — Prompt Injection:</strong> an agent that follows instructions can be made to break them.
+      </li>
+      <li>
+        <span class="dot" style="background:rgba(248,81,73,0.15);color:#f85149">✕</span>
+        A system prompt is not an access control policy. It has no enforcement mechanism below the model.
+      </li>
+      <li>
+        <span class="dot" style="background:rgba(248,81,73,0.15);color:#f85149">✕</span>
+        Advisory checks that the model can choose to ignore are not controls. They are suggestions.
+      </li>
+    </ul>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>Problem Statement</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 3: THREAT LANDSCAPE -->
+<div class="slide" id="s3">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#e3b341,#b45309,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(227,179,65,0.1);color:#e3b341;border:1px solid rgba(227,179,65,0.25)">Threat Landscape</div>
+    <h2>Two Independent<br>Threat Vectors.</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#e3b341,transparent)"></div>
+    <div class="threat-cols">
+      <div class="threat-col">
+        <h3 style="color:#f85149">Agents Can Misbehave</h3>
+        <ul class="bullets">
+          <li><span class="dot" style="background:rgba(248,81,73,0.12);color:#f85149">→</span>Prompt injection via adversarial user input</li>
+          <li><span class="dot" style="background:rgba(248,81,73,0.12);color:#f85149">→</span>Indirect injection through documents the agent reads</li>
+          <li><span class="dot" style="background:rgba(248,81,73,0.12);color:#f85149">→</span>Model hallucination bypassing intended constraints</li>
+          <li><span class="dot" style="background:rgba(248,81,73,0.12);color:#f85149">→</span>Instruction override via jailbreak or context stuffing</li>
+        </ul>
+      </div>
+      <div class="threat-col">
+        <h3 style="color:#e3b341">Humans Can Misbehave</h3>
+        <ul class="bullets">
+          <li><span class="dot" style="background:rgba(227,179,65,0.12);color:#e3b341">→</span>Malicious insiders with direct API access</li>
+          <li><span class="dot" style="background:rgba(227,179,65,0.12);color:#e3b341">→</span>Compromised tokens or stolen credentials</li>
+          <li><span class="dot" style="background:rgba(227,179,65,0.12);color:#e3b341">→</span>Direct backend calls that bypass the agent entirely</li>
+          <li><span class="dot" style="background:rgba(227,179,65,0.12);color:#e3b341">→</span>Misconfigured service permissions exploited at scale</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">In both cases, a system that relies only on the agent's cooperation fails.</p>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>Threat Landscape</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 4: PROPOSITION -->
+<div class="slide" id="s4">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#3fb950,#1a7f37,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.25)">What Needs To Be Enforced</div>
+    <h2>Defense in Depth —<br>Controls at Every Independent Layer.</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#3fb950,transparent)"></div>
+    <div class="layers">
+      <div class="layer">
+        <span class="layer-num" style="background:rgba(88,166,255,0.12);color:#58a6ff">IDENTITY</span>
+        <span class="layer-title">Verified JWT</span>
+        <span class="layer-desc">Every request carries a cryptographically signed token (EdDSA). Identity is verified — not trusted on claim alone.</span>
+      </div>
+      <div class="layer">
+        <span class="layer-num" style="background:rgba(227,179,65,0.12);color:#e3b341">POLICY</span>
+        <span class="layer-title">OPA at Service Layer</span>
+        <span class="layer-desc">Open Policy Agent evaluates every query at the service boundary against the verified identity. The agent cannot modify this check.</span>
+      </div>
+      <div class="layer">
+        <span class="layer-num" style="background:rgba(63,185,80,0.12);color:#3fb950">DATA</span>
+        <span class="layer-title">PostgreSQL RLS</span>
+        <span class="layer-desc">FORCE ROW LEVEL SECURITY enforced at the database. Filters tenant rows below the application — regardless of how the connection arrives.</span>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>Proposition</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 5: TEST OVERVIEW -->
+<div class="slide" id="s5">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#58a6ff,#1f6feb,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.25)">The Experiment</div>
+    <h2>One Query. Four Controls.<br>Same Infrastructure.</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#58a6ff,transparent)"></div>
+    <p class="body" style="margin-bottom:28px;font-size:22px">
+      Acme analyst requests Northstar order data — a multi-tenant access violation.
+      Same PostgreSQL database. Same Ollama model. Different enforcement at each level.
+    </p>
+    <table class="et">
+      <tr>
+        <td class="lv">L1</td><td class="ln">Prompt Only</td>
+        <td class="ld">System prompt instructs the model not to cross tenants. No service or DB controls exist.</td>
+        <td><span class="pill unsafe">UNSAFE</span></td>
+      </tr>
+      <tr>
+        <td class="lv">L2</td><td class="ln">Advisory Tool</td>
+        <td class="ld">Agent calls a policy tool that returns "not recommended". The advisory is not enforced.</td>
+        <td><span class="pill unsafe">UNSAFE</span></td>
+      </tr>
+      <tr>
+        <td class="lv">L3</td><td class="ln">Backend OPA</td>
+        <td class="ld">Signed JWT + OPA policy at service boundary. Denied before the query reaches the database.</td>
+        <td><span class="pill safe">SAFE</span></td>
+      </tr>
+      <tr>
+        <td class="lv">L4</td><td class="ln">PostgreSQL RLS</td>
+        <td class="ld">FORCE ROW LEVEL SECURITY on the reader role. Zero rows — even with a direct DB connection.</td>
+        <td><span class="pill safe">SAFE</span></td>
+      </tr>
+    </table>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>Test Matrix</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 6: L1 INTRO -->
+<div class="slide" id="s6">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#f85149,#b91c1c,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(248,81,73,0.1);color:#f85149;border:1px solid rgba(248,81,73,0.25)">Level 1 of 4</div>
+    <h2>Prompt Only</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#f85149,transparent)"></div>
+    <div class="level-card">
+      <p class="what">
+        <strong style="color:#f0f6fc">Configuration:</strong> The model receives a system prompt instructing it not to access data belonging to other tenants.
+        No controls exist at the service boundary or the database layer.
+        This represents the default architecture for most production AI agents deployed today.
+      </p>
+      <p class="expect">
+        <strong>Expected outcome:</strong> The cross-tenant query executes. The system prompt imposes no technical barrier.
+        A compliant model may refuse — but a manipulated one, or a direct API call, will not.
+      </p>
+      <div class="verdict">
+        <span class="pill unsafe">EXPECTED: UNSAFE</span>
+        <span style="font-size:16px;color:#484f58;font-weight:400">No enforcement below the model layer</span>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>L1 — Prompt Only</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 7: L2 INTRO -->
+<div class="slide" id="s7">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#f85149,#b91c1c,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(248,81,73,0.1);color:#f85149;border:1px solid rgba(248,81,73,0.25)">Level 2 of 4</div>
+    <h2>Advisory Tool</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#f85149,transparent)"></div>
+    <div class="level-card">
+      <p class="what">
+        <strong style="color:#f0f6fc">Configuration:</strong> The agent is given access to a policy-check tool it can call before executing a query.
+        The tool evaluates the request and returns a recommendation — for example, "not recommended".
+        This is a common pattern in AI agent design and is often presented as a safety measure.
+      </p>
+      <p class="expect">
+        <strong>Expected outcome:</strong> The tool returns its advisory. The agent acknowledges it — and executes the query anyway.
+        An advisory that can be overridden by the model is not an access control.
+      </p>
+      <div class="verdict">
+        <span class="pill unsafe">EXPECTED: UNSAFE</span>
+        <span style="font-size:16px;color:#484f58;font-weight:400">Advisory ≠ enforcement</span>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>L2 — Advisory Tool</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 8: L3 INTRO -->
+<div class="slide" id="s8">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#3fb950,#1a7f37,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.25)">Level 3 of 4</div>
+    <h2>Backend OPA Enforcement</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#3fb950,transparent)"></div>
+    <div class="level-card">
+      <p class="what">
+        <strong style="color:#f0f6fc">Configuration:</strong> Every request now carries a signed EdDSA JWT that cryptographically binds the caller's
+        tenant identity to the request. Open Policy Agent evaluates the identity and the query at the service
+        boundary before any SQL is issued. The agent cannot modify or bypass this check.
+      </p>
+      <p class="expect">
+        <strong>Expected outcome:</strong> The cross-tenant request is denied at the service layer — before it reaches the database.
+        Regardless of what the agent was instructed to do, or what a manipulated prompt says, OPA enforces the policy.
+      </p>
+      <div class="verdict">
+        <span class="pill safe">EXPECTED: SAFE</span>
+        <span style="font-size:16px;color:#484f58;font-weight:400">Enforced independently of the agent</span>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>L3 — Backend OPA</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 9: L4 INTRO -->
+<div class="slide" id="s9">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#3fb950,#1a7f37,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.25)">Level 4 of 4</div>
+    <h2>PostgreSQL Row-Level Security</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#3fb950,transparent)"></div>
+    <div class="level-card">
+      <p class="what">
+        <strong style="color:#f0f6fc">Configuration:</strong> The Acme reader role connects with <code style="color:#58a6ff;font-size:20px">FORCE ROW LEVEL SECURITY</code> enforced at the database.
+        This is a backstop control — it holds even if OPA is down, a token is forged, or the application
+        layer is compromised. It cannot be bypassed from within the application.
+      </p>
+      <p class="expect">
+        <strong>Expected outcome:</strong> The cross-tenant query returns zero rows through the agent — and also when
+        connected directly to the database, bypassing every upstream service. The database enforces the boundary.
+      </p>
+      <div class="verdict">
+        <span class="pill safe">EXPECTED: SAFE</span>
+        <span style="font-size:16px;color:#484f58;font-weight:400">Holds even with a direct database connection</span>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>L4 — PostgreSQL RLS</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 10: CONCLUSION -->
+<div class="slide" id="s10">
+  <div class="bg"></div>
+  <div class="top-bar" style="background:linear-gradient(90deg,#58a6ff,#1f6feb,transparent)"></div>
+  <div class="content">
+    <div class="badge" style="background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.25)">Conclusion</div>
+    <h2>The Boundary Must Be<br>Enforced at the Data Layer.</h2>
+    <div class="divider" style="background:linear-gradient(90deg,#58a6ff,transparent)"></div>
+    <table class="conclusion-table">
+      <tr><td class="lv">L1</td><td class="ln">Prompt Only</td><td class="ld">Northstar data returned. System prompt had no enforcement value.</td><td><span class="pill unsafe">FAIL</span></td></tr>
+      <tr><td class="lv">L2</td><td class="ln">Advisory Tool</td><td class="ld">Advisory ignored. Query executed regardless.</td><td><span class="pill unsafe">FAIL</span></td></tr>
+      <tr><td class="lv">L3</td><td class="ln">Backend OPA</td><td class="ld">Denied at service boundary. Policy enforced independently of the agent.</td><td><span class="pill safe">PASS</span></td></tr>
+      <tr><td class="lv">L4</td><td class="ln">PostgreSQL RLS</td><td class="ld">Zero rows — including via direct database connection, bypassing all services.</td><td><span class="pill safe">PASS</span></td></tr>
+    </table>
+    <div class="takeaway-box">
+      <p>
+        Every AI agent operating on sensitive or multi-tenant data requires
+        <strong>verified identity</strong>, <strong>backend policy enforcement</strong>, and <strong>database-level isolation</strong> —
+        enforced independently, at each layer.<br>
+        <strong>Prompts are instructions. Permissions require enforcement.</strong>
+      </p>
+    </div>
+  </div>
+  <div class="footer"><span>governed-agent-demo</span><span>Conclusion</span></div>
+</div>
+
+<script>
+  const n = new URLSearchParams(location.search).get('n') || '1';
+  const el = document.getElementById('s' + n);
+  if (el) el.classList.add('active');
+</script>
+</body>
+</html>

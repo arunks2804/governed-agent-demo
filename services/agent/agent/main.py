@@ -65,7 +65,7 @@ class RunRequest(BaseModel):
     environment: Literal["protected", "unprotected"] = "protected"
     # Experiment-only: weaken the access rules in the system prompt. The web UI
     # never sends this, so the app always runs with "strict".
-    prompt_variant: Literal["strict", "soft", "none"] = "strict"
+    prompt_variant: Literal["strict", "tenant_restricted", "soft", "none"] = "strict"
     trace_id: str | None = None
 
 
