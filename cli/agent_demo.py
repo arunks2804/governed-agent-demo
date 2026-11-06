@@ -513,15 +513,23 @@ def run_level_demo(name: str, only_level: str | None = None) -> None:
 
     print(c(f"\n{'#' * 78}", "blue"))
     print(c(f"### LEVEL COMPARISON: {name}{' — ' + only_level if only_level else ''} ###", "blue", "bold"))
+    time.sleep(0.4)
     print(c("Risk: ", "dim") + demo["risk"])
+    time.sleep(0.3)
     print(c(f"User: {label} <{sub}> tenant={tenant}", "dim"))
+    time.sleep(0.3)
     print(c(f"Prompt: ", "dim") + adversarial)
+    time.sleep(0.5)
     print()
 
     if only_level is None or only_level == "L1":
         # L1 — real LLM, tenant_restricted system prompt, no backend enforcement
         print(c("\n  [L1] System prompt sent to model:", "yellow", "bold"))
+        time.sleep(0.4)
         _show_system_prompt(label.split()[0], "tenant_restricted")
+        time.sleep(1.0)
+        print(c("  ► Sending to model — no backend enforcement on this path...", "dim"))
+        time.sleep(0.5)
         if INSECURE_DATA_SERVICE_URL:
             rec = run(user, "unprotected", adversarial, prompt_variant="tenant_restricted")
             render(rec, "unprotected", source="agent")
@@ -535,19 +543,32 @@ def run_level_demo(name: str, only_level: str | None = None) -> None:
         # L2 — real LLM with advisory tool, same system prompt, no backend enforcement
         advisory = _advisory_check(user, sql)
         print(c("\n  [L2] System prompt sent to model (same — advisory tool also available):", "yellow", "bold"))
+        time.sleep(0.4)
         _show_system_prompt(label.split()[0], "tenant_restricted")
+        time.sleep(0.8)
+        # Show advisory result BEFORE the agent runs so viewers see the ignored recommendation
+        adv = advisory.get("advisory", "?")
+        adv_color = "green" if adv == "ALLOWED" else "yellow"
+        print(f"\n  {c('advisory check →', 'dim')} {c(adv, adv_color, 'bold')}  {c(advisory.get('reason', ''), 'dim')}")
+        time.sleep(2.0)
+        print(f"  {c('(advisory ignored — query runs anyway)', 'yellow', 'bold')}")
+        time.sleep(0.8)
         if INSECURE_DATA_SERVICE_URL:
             rec = run(user, "unprotected", adversarial, prompt_variant="tenant_restricted")
             render(rec, "unprotected", source="agent")
             result_l2 = _extract_level_result(rec)
         else:
             result_l2 = {"ok": False, "error": "overlay_not_running", "message": "run 'make up'"}
-        render_level("L2", result_l2, advisory)
+        render_level("L2", result_l2, advisory=None)
 
     if only_level is None or only_level == "L3":
         # L3 — real LLM, protected path: OPA + verified identity blocks regardless of model
         print(c("\n  [L3] System prompt sent to model (same — OPA enforcement at backend):", "yellow", "bold"))
+        time.sleep(0.4)
         _show_system_prompt(label.split()[0], "tenant_restricted")
+        time.sleep(0.8)
+        print(c("  ► Sending to model — OPA enforced at service boundary...", "dim"))
+        time.sleep(0.5)
         rec = run(user, "protected", adversarial, prompt_variant="tenant_restricted")
         render(rec, "protected", source="agent")
         result_l3 = _extract_level_result(rec)
