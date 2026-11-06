@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 import time
@@ -48,105 +47,147 @@ CAPTURE_JS  = ROOT / "scripts" / "capture-slides.js"
 E2E_DIR     = ROOT / "e2e"
 
 W = 90
-COMPOSE_RUN = [
-    "docker", "compose",
-    "--file", "compose.yaml",
-    "--file", "compose.prompt-only.yaml",
-    "--profile", "test",
-    "run", "--rm", "--no-deps", "-T",
-    "-v", f"{ROOT}/cli:/cli",
-    "--entrypoint", "python",
-    "tests", "/cli/agent_demo.py",
-]
-# TERM env so the Python inside the container emits ANSI colors even without a TTY
-_CAPTURE_ENV = {**__import__("os").environ, "TERM": "xterm-256color", "FORCE_COLOR": "1"}
+SCRIPTS_DIR = ROOT / "var" / "demo_scripts"
 
-# ── ANSI helpers ──────────────────────────────────────────────────────────────
-
-R  = "\033[0m"
-B  = "\033[1m"
-D  = "\033[2m"
-RD = "\033[31m"
-GR = "\033[32m"
-CY = "\033[36m"
-YL = "\033[33m"
+ASCIINEMA = "/opt/homebrew/bin/asciinema"
 
 
-# ── asciinema v2 cast writer ──────────────────────────────────────────────────
+# ── bash script templates ─────────────────────────────────────────────────────
 
-class CastWriter:
-    def __init__(self, cols: int = W, rows: int = 32):
-        self.cols = cols; self.rows = rows
-        self.events: list[tuple[float, str, str]] = []
-        self._t = 0.0
+# Reusable header for every recording script: sets up the working dir, PS1,
+# and a typewrite() function that uses real printf+sleep in a bash loop.
+_SCRIPT_HEADER = """\
+#!/usr/bin/env bash
+set -euo pipefail
+cd {root}
+export TERM=xterm-256color
 
-    def write(self, text: str) -> "CastWriter":
-        self.events.append((self._t, "o", text)); return self
+typewrite() {{
+    local text="$1"
+    local delay="${{2:-0.04}}"
+    local i
+    for (( i=0; i<${{#text}}; i++ )); do
+        printf '%s' "${{text:$i:1}}"
+        sleep "$delay"
+    done
+}}
 
-    def clear(self) -> "CastWriter":
-        return self.write("\033[2J\033[H")
+prompt() {{
+    printf '\\033[32mgoverned-agent-demo\\033[0m:\\033[36m~\\033[0m $ '
+}}
 
-    def advance(self, secs: float) -> "CastWriter":
-        self._t += secs; return self
+clear
+printf '\\n'
+"""
 
-    def hold(self, secs: float, interval: float = 2.0) -> "CastWriter":
-        remaining = secs
-        while remaining > interval:
-            self._t += interval
-            self.events.append((self._t, "o", R))
-            remaining -= interval
-        self._t += remaining
-        return self
-
-    def type_chars(self, text: str, cps: float = 28.0) -> "CastWriter":
-        """Simulate a human typing — emits one character event per keystroke."""
-        delay = 1.0 / cps
-        for ch in text:
-            self.events.append((self._t, "o", ch))
-            self._t += delay
-        return self
-
-    def save(self, path: Path) -> None:
-        header = {"version": 2, "width": self.cols, "height": self.rows,
-                  "title": "Agentic AI Security Demo",
-                  "env": {"TERM": "xterm-256color", "SHELL": "/bin/zsh"}}
-        with path.open("w") as fh:
-            fh.write(json.dumps(header) + "\n")
-            for t, et, data in self.events:
-                fh.write(json.dumps([t, et, data]) + "\n")
-        print(f"    Cast: {len(self.events)} events, {self._t:.1f}s  →  {path.name}")
+# docker compose run without -T so the container inherits the PTY from asciinema
+_COMPOSE = (
+    "docker compose"
+    " --file compose.yaml"
+    " --file compose.prompt-only.yaml"
+    " --profile test"
+    " run --rm --no-deps"
+    f" -v {ROOT}/cli:/cli"
+    " --entrypoint python"
+    " tests /cli/agent_demo.py"
+)
 
 
-# ── live capture ──────────────────────────────────────────────────────────────
+def write_level_script(level: str) -> Path:
+    """Write a real bash script that records one enforcement level via asciinema."""
+    SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = f"python cli/agent_demo.py --level cross_tenant --only-level {level}"
+    script = SCRIPTS_DIR / f"record_{level}.sh"
+    script.write_text(
+        _SCRIPT_HEADER.format(root=ROOT)
+        + f"""\
+prompt
+typewrite '{cmd}'
+printf '\\n\\n'
+sleep 0.5
 
-def capture_level(level: str, only_level: str | None = None) -> str:
-    """Run the demo agent and capture real output. Pass only_level to isolate one level."""
-    args = ["--level", level]
-    if only_level:
-        args += ["--only-level", only_level]
-    label = f"{level}/{only_level}" if only_level else level
-    print(f"  Capturing live execution: {label} (Qwen + OPA + PostgreSQL)…", flush=True)
-    r = subprocess.run(COMPOSE_RUN + args,
-                       capture_output=True, text=True, cwd=ROOT, env=_CAPTURE_ENV)
-    out = r.stdout or r.stderr or "(no output)"
-    print(f"    → {len(out.splitlines())} lines captured")
-    return out
+# Real execution — Qwen LLM, OPA, PostgreSQL all run here
+{_COMPOSE} --level cross_tenant --only-level {level}
 
-
-def capture_psql(sql: str, role: str = "postgres") -> str:
-    full_sql = (f"SET SESSION AUTHORIZATION {role};\n" if role != "postgres" else "") + sql
-    r = subprocess.run(
-        ["docker", "compose", "--file", "compose.yaml",
-         "--file", "compose.prompt-only.yaml",
-         "exec", "-T", "postgres",
-         "psql", "-U", "postgres", "-d", "governed", "-c", full_sql],
-        capture_output=True, text=True, cwd=ROOT,
+printf '\\n'
+prompt
+sleep 8
+"""
     )
-    return (r.stdout or r.stderr or "(no output)").strip()
+    script.chmod(0o755)
+    return script
 
 
-def _lines(raw: str) -> str:
-    return raw.replace("\r\n", "\n").replace("\n", "\r\n")
+def write_l4_script(psql_super_sql: str, psql_reader_sql: str) -> Path:
+    """Write a real bash script for L4: three phases showing RLS holds at every layer."""
+    SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    cmd_l4   = "python cli/agent_demo.py --level cross_tenant --only-level L4"
+    cmd_sup  = f"docker compose exec postgres psql -U postgres -d governed -c '{psql_super_sql}'"
+    cmd_rdr  = (
+        "docker compose exec postgres psql -U postgres -d governed"
+        f" -c $'SET SESSION AUTHORIZATION acme_reader;\\n{psql_reader_sql}'"
+    )
+    script = SCRIPTS_DIR / "record_L4.sh"
+    script.write_text(
+        _SCRIPT_HEADER.format(root=ROOT)
+        + f"""\
+# ── PHASE 1: direct RLS query via agent_demo (reader role, FORCE RLS) ────────
+prompt
+typewrite '{cmd_l4}'
+printf '\\n\\n'
+sleep 0.5
+{_COMPOSE} --level cross_tenant --only-level L4
+printf '\\n'
+sleep 8
+
+# ── PHASE 2: bypass everything — connect directly as postgres superuser ───────
+printf '\\033[32m  PHASE 2 — bypassing agent + MCP + OPA, connecting as PostgreSQL superuser:\\033[0m\\n\\n'
+sleep 0.4
+prompt
+typewrite '{cmd_sup}'
+printf '\\n'
+sleep 0.4
+docker compose exec postgres psql -U postgres -d governed -c '{psql_super_sql}'
+printf '\\n\\033[33m  ^ Superuser bypasses FORCE RLS — both tenants visible.\\033[0m\\n\\n'
+sleep 8
+
+# ── PHASE 3: same direct connection, switch to acme_reader (FORCE RLS active) ─
+printf '\\033[32m  PHASE 3 — same direct connection, acme_reader role (FORCE RLS applied):\\033[0m\\n\\n'
+sleep 0.4
+prompt
+typewrite '{cmd_rdr}'
+printf '\\n'
+sleep 0.4
+docker compose exec postgres psql -U postgres -d governed \\
+    -c $'SET SESSION AUTHORIZATION acme_reader;\\n{psql_reader_sql}'
+printf '\\n\\033[32m  (0 rows) — query ran, database returned nothing. RLS in the storage engine.\\033[0m\\n\\n'
+sleep 12
+
+printf '\\033[32m  ✓  BLOCKED at every level — agent path, direct psql, no matter how deep you go.\\033[0m\\n\\n'
+prompt
+sleep 5
+"""
+    )
+    script.chmod(0o755)
+    return script
+
+
+def record_cast(script: Path, cast_path: Path) -> None:
+    """Run asciinema rec with the given bash script and save the cast."""
+    print(f"  Recording {cast_path.name} via asciinema rec…", flush=True)
+    subprocess.run(
+        [
+            ASCIINEMA, "rec",
+            "--output-format", "asciicast-v2",
+            "--overwrite",
+            "--window-size", f"{W}x32",
+            "--command", f"bash {script}",
+            str(cast_path),
+        ],
+        check=True,
+        cwd=ROOT,
+    )
+    print(f"    → recorded: {cast_path.name}")
 
 
 # ── narration ─────────────────────────────────────────────────────────────────
@@ -336,112 +377,14 @@ def png_to_mp4(png: Path, duration: float, out: Path) -> None:
     ], check=True)
 
 
-# ── terminal demo casts ───────────────────────────────────────────────────────
-
-PROMPT = GR + "governed-agent-demo" + R + ":" + CY + "~" + R + " $ "
-
-
-
-def build_level_cast(level: str, output: str, end_t: float) -> CastWriter:
-    """Build a terminal cast from REAL captured agent output for one enforcement level.
-
-    The output comes from actual execution: real Qwen LLM, real OPA evaluation,
-    real PostgreSQL queries. This function only handles timing and presentation.
-    """
-    cw = CastWriter()
-    cw.clear()
-    cw.write("\r\n")
-
-    # Shell prompt + typed command (the only simulated part)
-    cw.write(PROMPT)
-    cw.type_chars(
-        f"python cli/agent_demo.py --level cross_tenant --only-level {level}",
-        cps=38,
-    )
-    cw.write("\r\n\r\n")
-    cw.advance(0.4)
-
-    # Stream the real execution output
-    cw.write(_lines(output) + "\r\n")
-    cw.advance(0.5)
-    # Pause so viewer can read the output before the next slide
-    cw.hold(5.0)
-
-    cw.write(PROMPT)
-    cw.hold(max(0.0, end_t - cw._t))
-    return cw
-
-
-def build_l4_cast(l4_output: str, psql_super: str, psql_reader: str, end_t: float) -> CastWriter:
-    """Build terminal cast for L4: three phases of real execution output.
-
-    Phase 1 — direct RLS query via agent_demo.py (real execution, 0 rows returned)
-    Phase 2 — direct psql as superuser (real output, all tenants visible)
-    Phase 3 — direct psql as acme_reader (real output, FORCE RLS → 0 northstar rows)
-    """
-    cw = CastWriter()
-    cw.clear()
-    cw.write("\r\n")
-
-    # ── PHASE 1: Direct RLS query path ────────────────────────────────────────
-    cw.write(PROMPT)
-    cw.type_chars(
-        "python cli/agent_demo.py --level cross_tenant --only-level L4",
-        cps=38,
-    )
-    cw.write("\r\n\r\n")
-    cw.advance(0.4)
-    cw.write(_lines(l4_output) + "\r\n\r\n")
-    cw.advance(0.5)
-    cw.hold(8.0)
-
-    # ── PHASE 2: Bypass the full stack — connect as superuser ────────────────
-    cw.write(GR + B + "  PHASE 2 — Bypassing agent + MCP + OPA — connecting directly to PostgreSQL as superuser:" + R + "\r\n\r\n")
-    cw.advance(0.4)
-    cw.write(PROMPT)
-    cw.type_chars(
-        "docker compose exec postgres psql -U postgres -d governed -c "
-        '"SELECT tenant_id,count(*) FROM app.orders GROUP BY tenant_id ORDER BY 1;"',
-        cps=38,
-    )
-    cw.write("\r\n")
-    cw.advance(0.4)
-    cw.write(_lines(psql_super) + "\r\n")
-    cw.write(YL + B + "  ^ Superuser bypasses FORCE RLS — both tenants visible." + R + "\r\n\r\n")
-    cw.advance(0.5)
-    cw.hold(8.0)
-
-    # ── PHASE 3: Direct psql as acme_reader (FORCE RLS active) ──────────────
-    cw.write(GR + B + "  PHASE 3 — Same direct connection, reader role (FORCE RLS applied):" + R + "\r\n\r\n")
-    cw.advance(0.4)
-    cw.write(PROMPT)
-    cw.type_chars(
-        "docker compose exec postgres psql -U postgres -d governed -c "
-        '"SET SESSION AUTHORIZATION acme_reader; SELECT tenant_id,count(*) FROM app.orders '
-        "WHERE tenant_id='northstar' GROUP BY tenant_id;\"",
-        cps=38,
-    )
-    cw.write("\r\n")
-    cw.advance(0.4)
-    cw.write(_lines(psql_reader) + "\r\n")
-    cw.write(GR + B + "  (0 rows) — query ran, database returned nothing. RLS in the storage engine." + R + "\r\n\r\n")
-    cw.advance(0.5)
-    cw.hold(12.0)
-
-    cw.write(GR + B
-             + "  ✓  BLOCKED at every level — agent path, direct psql, no matter how deep you go." + R + "\r\n\r\n")
-    cw.write(PROMPT)
-    cw.hold(max(0.0, end_t - cw._t))
-    return cw
-
-
 # ── video assembly ────────────────────────────────────────────────────────────
 
 def cast_to_mp4(cast_path: Path, duration: float, out: Path) -> None:
     gif = out.with_suffix(".gif")
+    # --idle-time-limit 5: compress LLM-thinking pauses to at most 5 s each
     subprocess.run([
         "agg", "--font-size", "20", "--theme", "monokai", "--speed", "1.0",
-        "--idle-time-limit", "60", "--last-frame-duration", "1",
+        "--idle-time-limit", "5", "--last-frame-duration", "1",
         str(cast_path), str(gif),
     ], check=True)
     # tpad clones the last terminal frame to fill the full duration — this is
@@ -571,35 +514,20 @@ def main() -> None:
     for k, d in durs.items():
         print(f"  {k:12s}: {d:.1f}s")
 
-    # ── 3. capture live output (each level runs separately for clean isolated output) ───
+    # ── 3. record each level in a real shell via asciinema rec ───────────────
     if not a.from_cast:
-        print("\nCapturing live execution output…", flush=True)
-        # Each level is captured independently via --only-level for clean per-level terminal output
-        level_outputs: dict[str, str] = {}
-        for lvl in ("L1", "L2", "L3", "L4"):
-            level_outputs[lvl] = capture_level("cross_tenant", only_level=lvl)
+        print("\nRecording live execution via asciinema rec…", flush=True)
 
-        psql_super  = capture_psql(
-            "SELECT tenant_id, count(*) AS rows, round(sum(amount),2) AS total "
-            "FROM app.orders GROUP BY tenant_id ORDER BY tenant_id;",
-            role="postgres",
-        )
-        psql_reader = capture_psql(
-            "SELECT tenant_id, count(*) AS rows FROM app.orders "
-            "WHERE tenant_id = 'northstar' GROUP BY tenant_id;",
-            role="acme_reader",
-        )
-        print(f"  psql superuser:\n{psql_super}")
-        print(f"  psql acme_reader:\n{psql_reader}")
-
-        # ── 4. build casts from real captured output ──────────────────────────
-        print("\nBuilding terminal casts from real execution output…", flush=True)
+        # L1 / L2 / L3: each gets its own bash script + asciinema session
         for lvl in ("L1", "L2", "L3"):
-            cw = build_level_cast(lvl, level_outputs[lvl], durs[f"demo_{lvl}"])
-            cw.save(CASTS_DIR / f"demo_{lvl}.cast")
+            script = write_level_script(lvl)
+            record_cast(script, CASTS_DIR / f"demo_{lvl}.cast")
 
-        cw4 = build_l4_cast(level_outputs["L4"], psql_super, psql_reader, durs["demo_L4"])
-        cw4.save(CASTS_DIR / "demo_L4.cast")
+        # L4: three-phase bash script (agent path + direct superuser + acme_reader)
+        psql_sup_sql = "SELECT tenant_id, count(*) AS rows, round(sum(amount),2) AS total FROM app.orders GROUP BY tenant_id ORDER BY tenant_id;"
+        psql_rdr_sql = "SELECT tenant_id, count(*) AS rows FROM app.orders WHERE tenant_id = 'northstar' GROUP BY tenant_id;"
+        script_l4 = write_l4_script(psql_sup_sql, psql_rdr_sql)
+        record_cast(script_l4, CASTS_DIR / "demo_L4.cast")
 
     if a.cast_only:
         print(f"\nDone in {time.time()-t0:.0f}s  →  {CASTS_DIR}")
