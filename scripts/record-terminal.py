@@ -73,7 +73,7 @@ YL = "\033[33m"
 # ── asciinema v2 cast writer ──────────────────────────────────────────────────
 
 class CastWriter:
-    def __init__(self, cols: int = W, rows: int = 40):
+    def __init__(self, cols: int = W, rows: int = 32):
         self.cols = cols; self.rows = rows
         self.events: list[tuple[float, str, str]] = []
         self._t = 0.0
@@ -499,7 +499,7 @@ def build_level_cast(
 
     # ── Shell prompt + command ─────────────────────────────────────────────────
     cw.write(PROMPT)
-    cw.type_chars(f"python cli/agent_demo.py --level cross_tenant   # {level}: {name}", cps=38)
+    cw.type_chars(f"python cli/agent_demo.py --level cross_tenant  # {level}", cps=38)
     cw.write("\r\n\r\n")
     cw.advance(0.3)
 
@@ -510,20 +510,19 @@ def build_level_cast(
                  "Watch the adversarial user message below." + R + "\r\n\r\n")
         cw.advance(0.5)
 
-        _type_adversarial_prompt(cw, "UNPROTECTED")
-
         if level == "L2":
-            # ── L2 only: show advisory check result BEFORE the Ollama call ────
-            cw.write("  " + YL + B + "Advisory check" + R
+            # ── L2: show advisory check BEFORE the adversarial prompt ─────────
+            cw.write("  " + YL + B + "Advisory pre-check" + R
                      + D + "  →  GET /v1/check-advisory?target_tenant=northstar" + R + "\r\n")
             cw.advance(0.5)
             cw.write(D + '       Response: { "advisory": "NOT_RECOMMENDED",' + "\r\n"
                      + '                    "reason": "cross-tenant request violates isolation policy" }' + R + "\r\n")
             cw.advance(0.4)
             cw.write("  " + YL + B + "Advisory is NOT enforced" + R
-                     + D + "  — model still decides. Watch what it does:" + R + "\r\n\r\n")
-            cw.advance(0.5)
+                     + D + "  — model still decides. Watch:" + R + "\r\n\r\n")
+            cw.hold(4.0)   # hold so viewer reads "NOT_RECOMMENDED" before adversarial prompt
 
+        _type_adversarial_prompt(cw, "UNPROTECTED")
         _write_ollama_call(cw)
 
     elif level == "L3":
@@ -544,7 +543,9 @@ def build_level_cast(
     # ── Live agent execution output (ALLOWED for L1/L2, DENIED for L3) ───────
     agent_block = _extract_agent_execution(output)
     cw.write(_lines(agent_block) + "\r\n")
-    cw.advance(0.3)
+    cw.advance(0.5)
+    # hold so viewer can read the agent output before the verdict banner appears
+    cw.hold(5.0)
 
     # ── Verdict ───────────────────────────────────────────────────────────────
     unsafe = level in ("L1", "L2")
@@ -575,7 +576,7 @@ def build_l4_cast(l4_output: str, psql_super: str, psql_reader: str, end_t: floa
     cw.write("\r\n")
 
     cw.write(PROMPT)
-    cw.type_chars("python cli/agent_demo.py --level cross_tenant   # L4: POSTGRESQL RLS", cps=38)
+    cw.type_chars("python cli/agent_demo.py --level cross_tenant  # L4", cps=38)
     cw.write("\r\n\r\n")
     cw.advance(0.3)
 
@@ -585,6 +586,9 @@ def build_l4_cast(l4_output: str, psql_super: str, psql_reader: str, end_t: floa
     cw.advance(0.4)
     cw.write(_lines(l4_output) + "\r\n\r\n")
     cw.advance(0.5)
+    # narration: "The cross-tenant query through the agent returns an empty result — the RLS filter is working.
+    #             But now watch what happens when we go further."
+    cw.hold(8.0)
 
     # ── PHASE 2: Bypass agent + MCP + OPA, connect as superuser ─────────────
     cw.write(GR + B + "  PHASE 2 — Bypass the entire stack:" + R
@@ -603,7 +607,10 @@ def build_l4_cast(l4_output: str, psql_super: str, psql_reader: str, end_t: floa
     cw.advance(0.4)
     cw.write(_lines(psql_super) + "\r\n")
     cw.write(YL + B + "  ^ Superuser bypasses RLS — both tenants visible. This is the worst-case breach." + R + "\r\n\r\n")
-    cw.advance(0.6)
+    cw.advance(0.5)
+    # narration: "As the database superuser, every tenant is visible — Acme and Northstar rows both returned.
+    #             Now we switch to the acme_reader role..."
+    cw.hold(8.0)
 
     # ── PHASE 3: Same direct psql but as acme_reader (FORCE RLS) ────────────
     cw.write(GR + B + "  PHASE 3 — Same direct connection, switch to acme_reader role (FORCE RLS):" + R + "\r\n\r\n")
@@ -619,7 +626,11 @@ def build_l4_cast(l4_output: str, psql_super: str, psql_reader: str, end_t: floa
              + "  (0 rows) — Not rejected by policy. The query ran. The database returned nothing." + R + "\r\n")
     cw.write(GR + D
              + "  RLS is enforced in the storage engine itself — no application code to bypass." + R + "\r\n\r\n")
-    cw.advance(0.4)
+    cw.advance(0.5)
+    # narration: "Zero rows. Not rejected by policy — the query ran. But the database returned nothing.
+    #             Row-level security is enforced below the application, below the agent, below every service layer.
+    #             There is no application code to bypass — the boundary is in the storage engine itself."
+    cw.hold(12.0)
     cw.write("governed=# \\q\r\n\r\n")
 
     cw.write(GR + B
@@ -634,7 +645,7 @@ def build_l4_cast(l4_output: str, psql_super: str, psql_reader: str, end_t: floa
 def cast_to_mp4(cast_path: Path, duration: float, out: Path) -> None:
     gif = out.with_suffix(".gif")
     subprocess.run([
-        "agg", "--font-size", "15", "--theme", "monokai", "--speed", "1.0",
+        "agg", "--font-size", "20", "--theme", "monokai", "--speed", "1.0",
         "--idle-time-limit", "60", "--last-frame-duration", "1",
         str(cast_path), str(gif),
     ], check=True)
@@ -711,7 +722,7 @@ def main() -> None:
     ap.add_argument("--cast-only", action="store_true")
     ap.add_argument("--from-cast", action="store_true")
     ap.add_argument("--voice",  default="en_GB-cori-high")
-    ap.add_argument("--speed",  type=float, default=1.05)
+    ap.add_argument("--speed",  type=float, default=1.15)
     a = ap.parse_args()
 
     OUT.mkdir(parents=True, exist_ok=True)
@@ -727,7 +738,7 @@ def main() -> None:
     if not a.silent:
         print("Synthesising narration…", flush=True)
         segs = synth_narration(a.voice, a.speed)
-        offsets = sequential_offsets(segs, start=0.5, gap=1.0)
+        offsets = sequential_offsets(segs, start=0.5, gap=1.5)
         total_audio = offsets[-1][0] + segs[-1][2]
         print(f"  Total audio: {total_audio:.1f}s  ({len(segs)} segments, no overlaps)")
 
