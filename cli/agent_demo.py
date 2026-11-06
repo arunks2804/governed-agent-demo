@@ -327,6 +327,8 @@ def main() -> int:
     ap.add_argument("--demo", choices=[*DEMOS, "all"], help="predefined demo prompt (or 'all')")
     ap.add_argument("--level", choices=[*LEVEL_DEMOS, "all"],
                     help="4-level enforcement comparison (L1 prompt-only → L4 PostgreSQL RLS)")
+    ap.add_argument("--only-level", choices=["L1", "L2", "L3", "L4"],
+                    help="run only one enforcement level (use with --level)")
     ap.add_argument("--prompt", help="custom natural-language prompt")
     ap.add_argument("--user", choices=list(USERS), default="alice")
     ap.add_argument("--env", choices=["protected", "unprotected", "both"], default="both")
@@ -351,7 +353,7 @@ def main() -> int:
         for name in LEVEL_DEMOS:
             run_level_demo(name)
     elif args.level:
-        run_level_demo(args.level)
+        run_level_demo(args.level, only_level=args.only_level)
     elif args.demo == "all":
         for name in DEMOS:
             run_demo(name, envs)
@@ -493,13 +495,15 @@ def _extract_level_result(rec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_level_demo(name: str) -> None:
+def run_level_demo(name: str, only_level: str | None = None) -> None:
     """Run one scenario through all 4 enforcement levels and compare the outcomes.
 
     L1 and L2: the real LLM runs with a tenant_restricted system prompt so the
     model knows it should refuse, but the backend has no enforcement — the model
     misbehaves (or is manipulated) and the data is returned anyway.
     L3 and L4: same agent, same prompt — backend enforcement blocks it.
+
+    Pass only_level to run a single level (used for per-level asciinema recording).
     """
     demo = LEVEL_DEMOS[name]
     user = demo["user"]
@@ -508,55 +512,58 @@ def run_level_demo(name: str) -> None:
     sub, tenant, label = USERS[user]
 
     print(c(f"\n{'#' * 78}", "blue"))
-    print(c(f"### LEVEL COMPARISON: {name} ###", "blue", "bold"))
+    print(c(f"### LEVEL COMPARISON: {name}{' — ' + only_level if only_level else ''} ###", "blue", "bold"))
     print(c("Risk: ", "dim") + demo["risk"])
     print(c(f"User: {label} <{sub}> tenant={tenant}", "dim"))
     print(c(f"Prompt: ", "dim") + adversarial)
     print()
 
-    # L1 — real LLM, tenant_restricted system prompt, no backend enforcement
-    # Shows: model receives prompt injection, misbehaves, cross-tenant data returned
-    print(c("\n  [L1] System prompt sent to model:", "yellow", "bold"))
-    _show_system_prompt(label.split()[0], "tenant_restricted")
-    if INSECURE_DATA_SERVICE_URL:
-        rec = run(user, "unprotected", adversarial, prompt_variant="tenant_restricted")
-        render(rec, "unprotected", source="agent")
-        result_l1 = _extract_level_result(rec)
-    else:
-        result_l1 = {"ok": False, "error": "overlay_not_running",
-                     "message": "run 'make up' (not 'make up-protected')"}
-    render_level("L1", result_l1)
+    if only_level is None or only_level == "L1":
+        # L1 — real LLM, tenant_restricted system prompt, no backend enforcement
+        print(c("\n  [L1] System prompt sent to model:", "yellow", "bold"))
+        _show_system_prompt(label.split()[0], "tenant_restricted")
+        if INSECURE_DATA_SERVICE_URL:
+            rec = run(user, "unprotected", adversarial, prompt_variant="tenant_restricted")
+            render(rec, "unprotected", source="agent")
+            result_l1 = _extract_level_result(rec)
+        else:
+            result_l1 = {"ok": False, "error": "overlay_not_running",
+                         "message": "run 'make up' (not 'make up-protected')"}
+        render_level("L1", result_l1)
 
-    # L2 — real LLM with advisory tool, same system prompt, no backend enforcement
-    # Shows: model calls advisory (returns not-recommended), ignores it, data returned
-    advisory = _advisory_check(user, sql)
-    print(c("\n  [L2] System prompt sent to model (same — advisory tool also available):", "yellow", "bold"))
-    _show_system_prompt(label.split()[0], "tenant_restricted")
-    if INSECURE_DATA_SERVICE_URL:
-        rec = run(user, "unprotected", adversarial, prompt_variant="tenant_restricted")
-        render(rec, "unprotected", source="agent")
-        result_l2 = _extract_level_result(rec)
-    else:
-        result_l2 = {"ok": False, "error": "overlay_not_running", "message": "run 'make up'"}
-    render_level("L2", result_l2, advisory)
+    if only_level is None or only_level == "L2":
+        # L2 — real LLM with advisory tool, same system prompt, no backend enforcement
+        advisory = _advisory_check(user, sql)
+        print(c("\n  [L2] System prompt sent to model (same — advisory tool also available):", "yellow", "bold"))
+        _show_system_prompt(label.split()[0], "tenant_restricted")
+        if INSECURE_DATA_SERVICE_URL:
+            rec = run(user, "unprotected", adversarial, prompt_variant="tenant_restricted")
+            render(rec, "unprotected", source="agent")
+            result_l2 = _extract_level_result(rec)
+        else:
+            result_l2 = {"ok": False, "error": "overlay_not_running", "message": "run 'make up'"}
+        render_level("L2", result_l2, advisory)
 
-    # L3 — real LLM, protected path: OPA + verified identity blocks regardless of model
-    print(c("\n  [L3] System prompt sent to model (same — OPA enforcement at backend):", "yellow", "bold"))
-    _show_system_prompt(label.split()[0], "tenant_restricted")
-    rec = run(user, "protected", adversarial, prompt_variant="tenant_restricted")
-    render(rec, "protected", source="agent")
-    result_l3 = _extract_level_result(rec)
-    render_level("L3", result_l3)
+    if only_level is None or only_level == "L3":
+        # L3 — real LLM, protected path: OPA + verified identity blocks regardless of model
+        print(c("\n  [L3] System prompt sent to model (same — OPA enforcement at backend):", "yellow", "bold"))
+        _show_system_prompt(label.split()[0], "tenant_restricted")
+        rec = run(user, "protected", adversarial, prompt_variant="tenant_restricted")
+        render(rec, "protected", source="agent")
+        result_l3 = _extract_level_result(rec)
+        render_level("L3", result_l3)
 
-    # L4 — direct PostgreSQL connection as reader role (no service, RLS at DB level)
-    result_l4 = _direct_rls_query(user, sql)
-    render_level("L4", result_l4)
+    if only_level is None or only_level == "L4":
+        # L4 — direct PostgreSQL connection as reader role (no service, RLS at DB level)
+        result_l4 = _direct_rls_query(user, sql)
+        render_level("L4", result_l4)
 
-    print()
-    print(c("  Summary:", "bold"))
-    for lid, lvl in LEVELS.items():
-        icon = c("✓ SAFE", "green", "bold") if lvl["safe"] else c("✗ UNSAFE", "red", "bold")
-        print(f"    {c(lid, 'bold')}  {icon}  {lvl['name']}")
+    if only_level is None:
+        print()
+        print(c("  Summary:", "bold"))
+        for lid, lvl in LEVELS.items():
+            icon = c("✓ SAFE", "green", "bold") if lvl["safe"] else c("✗ UNSAFE", "red", "bold")
+            print(f"    {c(lid, 'bold')}  {icon}  {lvl['name']}")
 
 
 def run_demo(name: str, envs: list[str]) -> None:
