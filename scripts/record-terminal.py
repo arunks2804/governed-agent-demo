@@ -118,14 +118,26 @@ sleep 8
     return script
 
 
+def _sq(s: str) -> str:
+    """Escape a string for use inside a bash single-quoted argument."""
+    return s.replace("'", "'\\''")
+
+
 def write_l4_script(psql_super_sql: str, psql_reader_sql: str) -> Path:
     """Write a real bash script for L4: three phases showing RLS holds at every layer."""
     SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    cmd_l4   = "python cli/agent_demo.py --level cross_tenant --only-level L4"
-    cmd_sup  = f"docker compose exec postgres psql -U postgres -d governed -c '{psql_super_sql}'"
-    cmd_rdr  = (
-        "docker compose exec postgres psql -U postgres -d governed"
-        f" -c $'SET SESSION AUTHORIZATION acme_reader;\\n{psql_reader_sql}'"
+    cmd_l4 = "python cli/agent_demo.py --level cross_tenant --only-level L4"
+    # Display strings shown via typewrite — single-quote-escaped for bash
+    tw_sup = _sq(f"docker compose exec postgres psql -U postgres -d governed -c '{psql_super_sql}'")
+    tw_rdr = _sq(
+        f"docker compose exec postgres psql -U postgres -d governed"
+        f" -c 'SET SESSION AUTHORIZATION acme_reader; {psql_reader_sql}'"
+    )
+    # Actual exec uses double-quoted SQL — safe because SQL has no $, backticks, or "
+    exec_sup = f'docker compose exec postgres psql -U postgres -d governed -c "{psql_super_sql}"'
+    exec_rdr = (
+        'docker compose exec postgres psql -U postgres -d governed'
+        f' -c "SET SESSION AUTHORIZATION acme_reader; {psql_reader_sql}"'
     )
     script = SCRIPTS_DIR / "record_L4.sh"
     script.write_text(
@@ -144,10 +156,10 @@ sleep 8
 printf '\\033[32m  PHASE 2 — bypassing agent + MCP + OPA, connecting as PostgreSQL superuser:\\033[0m\\n\\n'
 sleep 0.4
 prompt
-typewrite '{cmd_sup}'
+typewrite '{tw_sup}'
 printf '\\n'
 sleep 0.4
-docker compose exec postgres psql -U postgres -d governed -c '{psql_super_sql}'
+{exec_sup}
 printf '\\n\\033[33m  ^ Superuser bypasses FORCE RLS — both tenants visible.\\033[0m\\n\\n'
 sleep 8
 
@@ -155,11 +167,10 @@ sleep 8
 printf '\\033[32m  PHASE 3 — same direct connection, acme_reader role (FORCE RLS applied):\\033[0m\\n\\n'
 sleep 0.4
 prompt
-typewrite '{cmd_rdr}'
+typewrite '{tw_rdr}'
 printf '\\n'
 sleep 0.4
-docker compose exec postgres psql -U postgres -d governed \\
-    -c $'SET SESSION AUTHORIZATION acme_reader;\\n{psql_reader_sql}'
+{exec_rdr}
 printf '\\n\\033[32m  (0 rows) — query ran, database returned nothing. RLS in the storage engine.\\033[0m\\n\\n'
 sleep 12
 
