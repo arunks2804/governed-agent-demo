@@ -48,9 +48,11 @@ No run is replayed. The video is recorded live against the running stack using s
 
 Requirements: Docker Desktop (Compose v2), Node 20+ (Playwright only), and optionally [Ollama](https://ollama.com) for live LLM runs. **No API keys are needed.**
 
+**Windows users:** Enable [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) (`wsl --install` in PowerShell as Administrator, then restart). Open a WSL2 terminal and run all commands from there — `make`, `./scripts/demo.sh`, and `open` (replace with your browser) all work inside WSL2. Docker Desktop must have WSL2 integration enabled (Settings → Resources → WSL Integration).
+
 ```bash
 make up                 # generates local secrets, builds, starts, waits for health
-open http://127.0.0.1:8088
+open http://127.0.0.1:8088   # Windows: open in browser manually
 ```
 
 1. Pick **Alice (Acme)** and sign in.
