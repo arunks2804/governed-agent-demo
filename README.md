@@ -4,7 +4,7 @@ A working, locally runnable demo showing that an LLM agent reaches data **only**
 
 It uses synthetic order data for two fictional companies, **Acme** and **Northstar**. This is a demonstration, not a production platform. See [Limitations](#limitations).
 
-► **[Watch the narrated demo (6½ min, with sound)](recordings/agentic-security-demo.mp4)** — four enforcement levels, one cross-tenant access attempt, recorded live against the running stack.
+► **[Watch the narrated demo (6½ min, with sound)](recordings/agentic-security-demo.mp4)** — four enforcement levels, one cross-tenant access attempt, recorded live against the running stack. The video covers scenarios 1–4 (prompt-only through PostgreSQL RLS). Scenarios 5–8 (runner network isolation, OPA policy change, fail-closed, and the prompt-only bypass) are verified by the automated test suite — see [Tests](#tests).
 
 ```
 make up        # start everything (http://127.0.0.1:8088)
